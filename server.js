@@ -4,7 +4,7 @@ const message = 'Hello World\n';
 const port = 8080;
 
 const server = http.createServer((req, res) => {
-  console.log(`Got ${req}`)
+  console.log(`Got ${req()}`)
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/plain');
   res.end(message);
