@@ -1,0 +1,22 @@
+{
+  "name": "aws-quotse",
+  "version": "1.0.0",
+  "description": "A stupid quote bot for slack",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "stop": "node ./node_modules/pm2/bin/pm2 stop quotse_aws",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sorell/aws-quotse.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sorell/aws-quotse/issues"
+  },
+  "homepage": "https://github.com/sorell/aws-quotse#readme"
+}
