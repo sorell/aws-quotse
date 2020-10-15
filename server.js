@@ -14,60 +14,84 @@ var dynamodb = new AWS.DynamoDB();
 //var dynamodb = new AWS.DynamoDB.DocumentClient({apiVersion: '2012-08-10'});
 
 
-function getQuoteCount(resultsFunc, res) {
+const util = require('util');
+const safePromisify = function (fun, methodsArray) {
+  const suffix = 'Async';
+    methodsArray.forEach(method => {
+      fun[method + suffix] = util.promisify(fun[method]);
+  });
+}
+safePromisify(dynamodb, ['getItem']);
+
+
+function darnation(res, text) {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/plain');
+  if (typeof text === "undefined") {
+    res.end('Fail. Darnation!');
+  }
+  else {
+    res.end(text);
+  }
+}
+
+
+function getQuoteCountPromise() {
   const params = {
     TableName: 'Counters',
     Key: {
       'Name' : {S: 'Quotes'}
     }
   };
-
-  dynamodb.getItem(params, function(err, data) {
-    if (err) {
-      console.error('getQuoteCount ', err);
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/plain');
-      res.end('Fail. Darnation!');
-    }
-    else {
-      console.log('GETCNTR ', data);
-      if (resultsFunc) {
-        resultsFunc(data.Item.Value.N, res);
-      }
-    }
-  });
+  return dynamodb.getItemAsync(params);
 }
 
 
-function getQuoteNr(itemCount, res) {
-  console.log('itemCount', itemCount)
-
-  if (itemCount < 1) {
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Database empty');
-    return;
-  }
-
-  const getIdx = Math.floor(Math.random() * itemCount);
+function getQuoteNrPromise(getIdx) {
   const params = {
     TableName: 'Quotse',
     Key: {
       'Idx': {N: getIdx.toString()}
     }
   };
+  return dynamodb.getItemAsync(params);
+}
 
-  dynamodb.getItem(params, function(err, data) {
-    if (err) {
-      console.error('getQuoteNr(', getIdx, '/', itemCount, ') error: ', err);
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/plain');
-      res.end('Fail. Darnation!');
-    } else {
+
+function getRandomQuote(res) {
+  getQuoteCountPromise()
+  .then((result) => {
+    // console.log('getRandomQuote THEN1', result);
+    try {
+      const itemCount = parseInt(result.Item.Value.N);
+      if (itemCount < 1) {
+        darnation(res, 'Database empty');
+        return;
+      }
+      return getQuoteNrPromise(Math.floor(Math.random() * itemCount));
+    }
+    catch (err) {
+      console.error(err);
+      darnation(res);
+    }
+  }, (err) => {
+    console.error('GET Counters', err);
+    darnation(res);
+  })
+  .then((result) => {
+    try {
+      // console.log('getRandomQuote THEN2', result);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
-      res.end('{"response_type":"in_channel","text":"' + data.Item.Text.S.split('"').join('\\"') + '"}');
+      res.end('{"response_type":"in_channel","text":"' + result.Item.Text.S.split('"').join('\\"') + '"}');
     }
+    catch (err) {
+      console.error(err);
+      darnation(res);
+    }
+  }, (err) => {
+    console.error('GET Quotse', err);
+    darnation(res);
   });
 }
 
@@ -131,9 +155,7 @@ function pushQuotes(res) {
   }
   catch (err) {
     console.error(err);
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Pffffff....');
+    darnation(res);
   }
 }
 
@@ -144,17 +166,13 @@ function adminAction(text, res) {
   const parts = text.split(' ');
   if (parts.length < 2) {
     console.log('adminAction parts.length =', parts.length.toString());
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Parameters missing');
+    darnation(res, 'Parameters missing');
     return;
   }
 
   if (parts[0] != '2T0uVdwJTd2hSSx9oa') {
     console.log('adminAction bad pass');
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Bad param');
+    darnation(res, 'Bad param');
     return;
   }
 
@@ -163,9 +181,7 @@ function adminAction(text, res) {
   }
   else {
     console.log('adminAction unk cmd');
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Bad param');
+    darnation(res, 'Bad param');
   }
 }
 
@@ -178,9 +194,7 @@ const server = http.createServer((req, res) => {
 
   if (!req.headers.hasOwnProperty('user-agent')  ||  !req.headers['user-agent'].includes('Slackbot')  ||  !req.headers.hasOwnProperty('x-slack-signature')) {
     console.log('Request headers invalid');
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Pffffff....');
+    darnation(res, 'Pffffff....');
     return;
   }
 
@@ -192,20 +206,15 @@ const server = http.createServer((req, res) => {
       const parsedData = querystring.parse(rawData);
       const action = querystring.parse(url.parse(req.url)['query'])['action'];
       const text = parsedData['text'];
-      console.log('ACTION ', action);
+      console.log('ACTION', action);
       console.log('TEXT', text);
-      var itemCount = 0;
-
-      if (text == 'get') {
-      }
 
       if (action == 'getrandom') {
-        getQuoteCount(getQuoteNr, res);
+        //getQuoteCount(getQuoteNr, res);
+        getRandomQuote(res);
       }
-      if (action == 'add') {
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'text/plain');
-        res.end('Not implemented yet');
+      else if (action == 'add') {
+        darnation(res, 'Not implemented yet');
       }
       else if (action == 'admin') {
         adminAction(text, res);
