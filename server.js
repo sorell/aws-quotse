@@ -83,7 +83,7 @@ function getRandomQuote(res) {
       // console.log('getRandomQuote THEN2', result);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
-      res.end('{"response_type":"in_channel","text":"' + result.Item.Text.S.split('"').join('\\"') + '"}');
+      res.end('{"response_type":"in_channel","text":"' + result.Item.Quote.S.split('"').join('\\"') + '"}');
     }
     catch (err) {
       console.error(err);
@@ -96,37 +96,41 @@ function getRandomQuote(res) {
 }
 
 
-function queryQuote(keyword, res) {
+function scanQuotes(keyword, res) {
     const params = {
       TableName: 'Quotse',
-      KeyConditionExpression: "#id = :idnum",
-      ExpressionAttributeNames:{"#id": "Idx"},
-      ExpressionAttributeValues: {":idnum": {'N': getIdx.toString()}}
-    }
-    console.log('QUERY', params)
+      FilterExpression: 'contains (Quote, :keyword)',
+      ProjectionExpression: 'Quote',
+      ExpressionAttributeValues: {":keyword": {'S': keyword}}
+    };
 
-    dynamodb.query(params, function(err, data) {
+    dynamodb.scan(params, function(err, result) {
       if (err) {
-        console.log("Error", err)
+        console.log("QUERY Error", err);
       } else {
-        console.log("Success", data.Items)
-        console.log(data)
-        data.Items.forEach(function(element, index, array) {
-          console.log(element.Idx.S + " (" + element.title.S + ")")
-        });
+        console.log("QUERY Success", result);
+        console.log('got items:', result.Items.length);
+        
+        if (result.Items.length < 1) {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end('{"response_type":"in_channel","text":"No match :("}');
+          return;
+        }
+
+        const itemNr = Math.floor(Math.random() * result.Items.length);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end('{"response_type":"in_channel","text":"' + result.Items[itemNr].Quote.S.split('"').join('\\"') + '"}');
       }
     });
-
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.end('{"response_type":"in_channel","text":"You say: WTF ' + text + '"}');
 }
 
 
 function pushQuotes(res) {
   try {
     var fs = require('fs');
-    const allLines = fs.readFileSync('qsuotes.txt', 'utf8');
+    const allLines = fs.readFileSync('quotes.txt', 'utf8');
     const lines = allLines.split('\n');
     var addedLines = 0;
     lines.forEach(function(line) {
@@ -135,7 +139,7 @@ function pushQuotes(res) {
           TableName: 'Quotse',
           Item: {
             'Idx': {N: addedLines.toString()},
-            'Text': {S: line}
+            'Quote': {S: line}
           }
         };
 
@@ -211,7 +215,12 @@ const server = http.createServer((req, res) => {
 
       if (action == 'getrandom') {
         //getQuoteCount(getQuoteNr, res);
-        getRandomQuote(res);
+        if (text.length < 1) {
+          getRandomQuote(res);
+        }
+        else {
+          scanQuotes(text, res);
+        }
       }
       else if (action == 'add') {
         darnation(res, 'Not implemented yet');
