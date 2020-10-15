@@ -99,7 +99,7 @@ function getRandomQuote(res) {
 function scanQuotes(keyword, res) {
   const params = {
     TableName: 'Quotse',
-    FilterExpression: 'contains (Quote, :keyword)',
+    FilterExpression: 'contains (ScanText, :keyword)',
     ProjectionExpression: 'Quote',
     ExpressionAttributeValues: {":keyword": {'S': keyword}}
   };
@@ -122,6 +122,7 @@ function scanQuotes(keyword, res) {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.end('{"response_type":"in_channel","text":"' + result.Items[itemNr].Quote.S.split('"').join('\\"') + '"}');
+      console.log(result.Items[itemNr]);
     }
   });
 }
@@ -139,17 +140,38 @@ function pushQuotes(res) {
           TableName: 'Quotse',
           Item: {
             'Idx': {N: addedLines.toString()},
-            'Quote': {S: line}
+            'Quote': {S: line},
+            'ScanText': {S: line.toLowerCase()}
           }
         };
 
         dynamodb.putItem(params, function(err, data) {
           if (err) {
-            console.error('Write error', err);
+            console.error('Quotse write error', err);
           }
         });
 
         addedLines += 1;
+      }
+    });
+
+    const params = {
+      TableName: 'Counters',
+      Key: {
+        'Name' : {S: 'Quotes'}
+      },
+      ExpressionAttributeNames: {
+        "#V": "Value"
+      },
+      ExpressionAttributeValues: {
+        ":v": {N: addedLines.toString()}
+      },
+      UpdateExpression: "SET #V = :v"
+    };
+
+    dynamodb.updateItem(params, function(err, data) {
+      if (err) {
+        console.error('Counters write error', err);
       }
     });
 
