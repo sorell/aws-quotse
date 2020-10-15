@@ -97,33 +97,33 @@ function getRandomQuote(res) {
 
 
 function scanQuotes(keyword, res) {
-    const params = {
-      TableName: 'Quotse',
-      FilterExpression: 'contains (Quote, :keyword)',
-      ProjectionExpression: 'Quote',
-      ExpressionAttributeValues: {":keyword": {'S': keyword}}
-    };
+  const params = {
+    TableName: 'Quotse',
+    FilterExpression: 'contains (Quote, :keyword)',
+    ProjectionExpression: 'Quote',
+    ExpressionAttributeValues: {":keyword": {'S': keyword}}
+  };
 
-    dynamodb.scan(params, function(err, result) {
-      if (err) {
-        console.log("QUERY Error", err);
-      } else {
-        console.log("QUERY Success", result);
-        console.log('got items:', result.Items.length);
-        
-        if (result.Items.length < 1) {
-          res.statusCode = 200;
-          res.setHeader('Content-Type', 'application/json');
-          res.end('{"response_type":"in_channel","text":"No match :("}');
-          return;
-        }
-
-        const itemNr = Math.floor(Math.random() * result.Items.length);
+  dynamodb.scan(params, function(err, result) {
+    if (err) {
+      console.log("QUERY Error", err);
+    } else {
+      console.log("QUERY Success", result);
+      console.log('got items:', result.Items.length);
+      
+      if (result.Items.length < 1) {
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
-        res.end('{"response_type":"in_channel","text":"' + result.Items[itemNr].Quote.S.split('"').join('\\"') + '"}');
+        res.end('{"response_type":"in_channel","text":"No match :("}');
+        return;
       }
-    });
+
+      const itemNr = Math.floor(Math.random() * result.Items.length);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end('{"response_type":"in_channel","text":"' + result.Items[itemNr].Quote.S.split('"').join('\\"') + '"}');
+    }
+  });
 }
 
 
