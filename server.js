@@ -8,7 +8,7 @@ const querystring = require('querystring');
 
 var AWS = require('aws-sdk');
 
-AWS.config.update({region: "eu-west-1"});
+AWS.config.update({region: 'eu-west-1'});
 
 var dynamodb = new AWS.DynamoDB();
 //var dynamodb = new AWS.DynamoDB.DocumentClient({apiVersion: '2012-08-10'});
@@ -21,13 +21,13 @@ const safePromisify = function (fun, methodsArray) {
       fun[method + suffix] = util.promisify(fun[method]);
   });
 }
-safePromisify(dynamodb, ['getItem']);
+safePromisify(dynamodb, ['getItem', 'putItem', 'updateItem', 'deleteItem']);
 
 
 function darnation(res, text) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/plain');
-  if (typeof text === "undefined") {
+  if (typeof text === 'undefined') {
     res.end('Fail. Darnation!');
   }
   else {
@@ -47,6 +47,50 @@ function getQuoteCountPromise() {
 }
 
 
+function incQuoteCountPromise(counterCurrValue)
+{
+  const params = {
+    TableName: 'Counters',
+    Key: {
+      'Name' : {S: 'Quotes'}
+    },
+    ExpressionAttributeNames: {
+      '#V': 'Value'
+    },
+    ExpressionAttributeValues: {
+      ':nv': {N: (counterCurrValue+1).toString()},
+      ':cv': {N: (counterCurrValue).toString()}
+    },
+    ConditionExpression: '#V = :cv',
+    UpdateExpression: 'SET #V = :nv',
+    ReturnValues: 'UPDATED_OLD'
+  };
+  return dynamodb.updateItemAsync(params);
+}
+
+
+function decQuoteCountPromise(counterCurrValue)
+{
+  const params = {
+    TableName: 'Counters',
+    Key: {
+      'Name' : {S: 'Quotes'}
+    },
+    ExpressionAttributeNames: {
+      '#V': 'Value'
+    },
+    ExpressionAttributeValues: {
+      ':nv': {N: (counterCurrValue-1).toString()},
+      ':cv': {N: (counterCurrValue).toString()}
+    },
+    ConditionExpression: '#V = :cv',
+    UpdateExpression: 'SET #V = :nv',
+    ReturnValues: 'UPDATED_NEW'
+  };
+  return dynamodb.updateItemAsync(params);
+}
+
+
 function getQuoteNrPromise(getIdx) {
   const params = {
     TableName: 'Quotse',
@@ -55,6 +99,19 @@ function getQuoteNrPromise(getIdx) {
     }
   };
   return dynamodb.getItemAsync(params);
+}
+
+
+function deleteQuoteNrPromise(deleteIdx) {
+  const params = {
+    TableName: 'Quotse',
+    Key: {
+      'Idx': {N: deleteIdx.toString()}
+    },
+    ReturnValues: 'ALL_OLD'
+  };
+  console.log('DELETE', params);
+  return dynamodb.deleteItemAsync(params);
 }
 
 
@@ -101,14 +158,14 @@ function scanQuotes(keyword, res) {
     TableName: 'Quotse',
     FilterExpression: 'contains (ScanText, :keyword)',
     ProjectionExpression: 'Quote',
-    ExpressionAttributeValues: {":keyword": {'S': keyword}}
+    ExpressionAttributeValues: {':keyword': {'S': keyword.toLowerCase()}}
   };
 
   dynamodb.scan(params, function(err, result) {
     if (err) {
-      console.log("QUERY Error", err);
+      console.log('QUERY Error', err);
     } else {
-      console.log("QUERY Success", result);
+      console.log('QUERY Success', result);
       console.log('got items:', result.Items.length);
       
       if (result.Items.length < 1) {
@@ -124,6 +181,99 @@ function scanQuotes(keyword, res) {
       res.end('{"response_type":"in_channel","text":"' + result.Items[itemNr].Quote.S.split('"').join('\\"') + '"}');
       console.log(result.Items[itemNr]);
     }
+  });
+}
+
+
+function addQuote(line, res) {
+  getQuoteCountPromise()
+  .then((result) => {
+    // console.log('getRandomQuote THEN1', result);
+    try {
+      const itemCount = parseInt(result.Item.Value.N);
+      return incQuoteCountPromise(itemCount);
+    }
+    catch (err) {
+      console.error(err);
+      darnation(res);
+    }
+  }, (err) => {
+    console.error('GET Counter', err);
+    darnation(res);
+  })
+  .then((result) => {
+    console.log('incRandomQuote THEN1', result);
+    const params = {
+      TableName: 'Quotse',
+      Item: {
+        'Idx': {N: result.Attributes.Value.N},
+        'Quote': {S: line},
+        'ScanText': {S: line.toLowerCase()}
+      }
+    };
+
+    return dynamodb.putItemAsync(params);
+  }, (err) => {
+    console.error('INC Counter', err);
+    darnation(res);
+  })
+  .then((result) => {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end('{"response_type":"in_channel","text":"It is done"}');
+  }, (err) => {
+    console.error('PUT new', err);
+    darnation(res);
+  });
+}
+
+
+function deleteLastQuote(res)
+{
+  var deletedQuote = '';
+
+  getQuoteCountPromise()
+  .then((result) => {
+    console.log('deleteLastQuote THEN', result);
+    try {
+      const itemCount = parseInt(result.Item.Value.N);
+      if (itemCount < 1) {
+        darnation(res, 'Database empty');
+        return;
+      }
+      return decQuoteCountPromise(itemCount);
+    }
+    catch (err) {
+      console.error(err);
+      darnation(res);
+    }
+  }, (err) => {
+    console.error('GET Counter', err);
+    darnation(res);
+  })
+  .then((result) => {
+    console.log('DEC THEN', result);
+    try {
+      const itemIdx = parseInt(result.Attributes.Value.N);
+      return deleteQuoteNrPromise(itemIdx);
+    } catch (err) {
+      console.error('DELETE THEN', err);
+    }
+  }, (err) => {
+    console.error('DEC Counter', err);
+    darnation(res);
+  })
+  .then((result) => {
+    console.log('DELETE Quote', result);
+    try {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/plain');
+      res.end('Quote removed: ' + result.Attributes.Quote.S.split('"').join('\\"'));
+    } catch (err) {
+      console.error('DELETE Quote', err);
+    }
+  }, (err) => {
+    console.error('DELETE Quote', err);
   });
 }
 
@@ -161,12 +311,12 @@ function pushQuotes(res) {
         'Name' : {S: 'Quotes'}
       },
       ExpressionAttributeNames: {
-        "#V": "Value"
+        '#V': 'Value'
       },
       ExpressionAttributeValues: {
-        ":v": {N: addedLines.toString()}
+        ':v': {N: addedLines.toString()}
       },
-      UpdateExpression: "SET #V = :v"
+      UpdateExpression: 'SET #V = :v'
     };
 
     dynamodb.updateItem(params, function(err, data) {
@@ -204,6 +354,9 @@ function adminAction(text, res) {
 
   if (parts[1] == 'pushQuotes') {
     pushQuotes(res);
+  }
+  else if (parts[1] == 'deleteLast') {
+    deleteLastQuote(res);
   }
   else {
     console.log('adminAction unk cmd');
@@ -245,7 +398,7 @@ const server = http.createServer((req, res) => {
         }
       }
       else if (action == 'add') {
-        darnation(res, 'Not implemented yet');
+        addQuote(text, res);
       }
       else if (action == 'admin') {
         adminAction(text, res);
