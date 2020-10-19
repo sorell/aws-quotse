@@ -230,11 +230,9 @@ function addQuote(line, res) {
 
 function deleteLastQuote(res)
 {
-  var deletedQuote = '';
-
   getQuoteCountPromise()
   .then((result) => {
-    console.log('deleteLastQuote THEN', result);
+    // console.log('deleteLastQuote THEN', result);
     try {
       const itemCount = parseInt(result.Item.Value.N);
       if (itemCount < 1) {
@@ -252,7 +250,7 @@ function deleteLastQuote(res)
     darnation(res);
   })
   .then((result) => {
-    console.log('DEC THEN', result);
+    // console.log('DEC THEN', result);
     try {
       const itemIdx = parseInt(result.Attributes.Value.N);
       return deleteQuoteNrPromise(itemIdx);
@@ -264,7 +262,7 @@ function deleteLastQuote(res)
     darnation(res);
   })
   .then((result) => {
-    console.log('DELETE Quote', result);
+    // console.log('DELETE Quote', result);
     try {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/plain');
@@ -336,6 +334,73 @@ function pushQuotes(res) {
 }
 
 
+function pullQuotes(res) {
+  // const pqueue = require('p-queue');
+  // const queue = new PQueue({concurrency: 1});
+  var pulled = 0;
+
+  try {
+    getQuoteCountPromise().then((result) => {
+      console.log('pull CNT', result);
+        for (var i=0; i<result.Item.Value.N; ++i) {
+          getQuoteNrPromise(i).then((result) => {
+            pulled += 1;
+            console.log(result.Item.Quote.S);
+          }, (err) => {
+            console.error('pull GET ERROR', err);
+          });
+        }
+    }, (err) => {
+      console.error('pullQuotes ERROR', err);
+      darnation(res);
+    });
+  }
+  catch (err) {
+    console.error('pull CONV ERROR', err);
+    darnation(res);
+    return;
+  }
+
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/plain');
+  res.end(pulled.toString() + ' lines pulled to ');
+
+  return;
+
+
+
+  try {
+    // var fs = require('fs');
+    // const allLines = fs.writeFile('quotes_pulled.txt', 'utf8');
+
+    const params = {
+      TableName: 'Quotse',
+      KeyConditionExpression: 'Idx BETWEEN :from AND :to',
+      // ExpressionAttributeNames: {
+      //   '#idx': 'Idx'
+      // },
+      ExpressionAttributeValues: {
+        ':from': {N: '0'},
+        ':to': {N: '99'}
+      }
+    };
+
+    dynamodb.query(params, function (err, data) {
+      if (err) {
+        console.error(err);
+      }
+      else {
+        console.log(data);
+      }
+    });
+  }
+  catch (err) {
+    console.error(err);
+    darnation(res);
+  }
+}
+
+
 function adminAction(text, res) {
   console.log('adminAction', text);
 
@@ -354,6 +419,9 @@ function adminAction(text, res) {
 
   if (parts[1] == 'pushQuotes') {
     pushQuotes(res);
+  }
+  else if (parts[1] == 'pullQuotes') {
+    pullQuotes(res);
   }
   else if (parts[1] == 'deleteLast') {
     deleteLastQuote(res);
@@ -389,7 +457,6 @@ const server = http.createServer((req, res) => {
       console.log('TEXT', text);
 
       if (action == 'getrandom') {
-        //getQuoteCount(getQuoteNr, res);
         if (text.length < 1) {
           getRandomQuote(res);
         }
