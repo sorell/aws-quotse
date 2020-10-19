@@ -334,22 +334,68 @@ function pushQuotes(res) {
 }
 
 
+// function pullQuoteNrPromise(getIdx) {
+//   const params = {
+//     TableName: 'Quotse',
+//     Key: {
+//       'Idx': {N: getIdx.toString()}
+//     }
+//   };
+//   return dynamodb.getItemAsync(params);
+// }
+
+function pullQuoteNrPromise(res, fileHandle, getIdx) {
+  const params = {
+    TableName: 'Quotse',
+    Key: {
+      'Idx': {N: getIdx.toString()}
+    }
+  };
+  return new Promise((resolve, reject) => {
+    dynamodb.getItemAsync(params).then(function(result) {
+      resolve({'http': res, 'db': result, 'idx': getIdx, 'fh': fileHandle});
+    }).catch(function (err) {
+      reject(err);
+    });
+  });
+}
+
+
+function writePulledQuote(result) {
+  var fileHandle = result.fh;
+  if (Object.keys(result.db).length == 0) {
+    console.log('Pulled', result.idx, 'quotes');
+    fileHandle.end();
+    res = result.http;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/plain');
+    res.end(result.idx.toString() + ' lines pulled to quotes_pulled.txt');
+    return null;
+  }
+  
+  // console.log(result);
+  fileHandle.write(result.db.Item.Quote.S + '\n');
+  const quoteIdx = parseInt(result.db.Item.Idx.N);
+  // console.log(quoteIdx, result.db.Item.Quote.S);
+  return pullQuoteNrPromise(result.http, result.fh, quoteIdx+1).then(writePulledQuote);
+};
+
+
 function pullQuotes(res) {
   // const pqueue = require('p-queue');
   // const queue = new PQueue({concurrency: 1});
   var pulled = 0;
 
   try {
+    var fs = require('fs');
+    var fileHandle = fs.createWriteStream('quotes_pulled.txt', {flags: 'w'});
+
     getQuoteCountPromise().then((result) => {
       console.log('pull CNT', result);
-        for (var i=0; i<result.Item.Value.N; ++i) {
-          getQuoteNrPromise(i).then((result) => {
-            pulled += 1;
-            console.log(result.Item.Quote.S);
-          }, (err) => {
-            console.error('pull GET ERROR', err);
-          });
-        }
+      const quoteCnt = result.Item.Value.N;
+      if (quoteCnt > 0) {
+        pullQuoteNrPromise(res, fileHandle, 0).then(writePulledQuote);
+      }
     }, (err) => {
       console.error('pullQuotes ERROR', err);
       darnation(res);
@@ -361,9 +407,6 @@ function pullQuotes(res) {
     return;
   }
 
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/plain');
-  res.end(pulled.toString() + ' lines pulled to ');
 
   return;
 
