@@ -335,7 +335,7 @@ function pushQuotes(httpRes) {
 
 
 function pullQuoteNrPromise(funcData) {
-console.log(pullQuoteNrPromise, funcData);
+  // console.log(pullQuoteNrPromise, funcData.idx, '/', funcData.count);
   const params = {
     TableName: 'Quotse',
     Key: {
@@ -356,12 +356,12 @@ console.log(pullQuoteNrPromise, funcData);
 function writePulledQuote(result) {
   var fileHandle = result.fh;
   if (result.idx >= result.count) {
-    console.log('Pulled', result.idx, 'quotes');
+    console.log('Pulled', result.idx, 'quotes to', result.fn);
     fileHandle.end();
     httpRes = result.http;
     httpRes.statusCode = 200;
     httpRes.setHeader('Content-Type', 'text/plain');
-    httpRes.end(result.idx.toString() + ' lines pulled to quotes_pulled.txt');
+    httpRes.end(result.idx.toString() + ' lines pulled to ' + result.fn);
     return null;
   }
 
@@ -374,11 +374,11 @@ function writePulledQuote(result) {
 };
 
 
-function pullQuotes(httpRes) {
+function pullQuotes(httpRes, fileName) {
   var pulled = 0;
 
   try {
-    var fileHandle = fs.createWriteStream('quotes_pulled.txt', {flags: 'w'});
+    var fileHandle = fs.createWriteStream(fileName, {flags: 'w'});
 
     getQuoteCountPromise().then((result) => {
       // console.log('pull CNT', result);
@@ -388,7 +388,7 @@ function pullQuotes(httpRes) {
         return;
       }
 
-      pullQuoteNrPromise({'http': httpRes, 'fh': fileHandle, 'idx': 0, 'count': quoteCnt}).then(writePulledQuote);
+      pullQuoteNrPromise({http: httpRes, fh: fileHandle, fn: fileName, idx: 0, count: quoteCnt}).then(writePulledQuote);
     }, (err) => {
       console.error('pullQuotes ERROR', err);
       darnation(httpRes);
@@ -431,7 +431,12 @@ function adminAction(text, httpRes) {
     pushQuotes(httpRes);
   }
   else if (parts[1] == 'pullQuotes') {
-    pullQuotes(httpRes);
+    if (parts.length < 3) {
+      console.warn('pullQuotes missing filename');
+      darnation(httpRes, 'Missing filename');
+      return;
+    }
+    pullQuotes(httpRes, parts[2]);
   }
   else if (parts[1] == 'deleteLast') {
     deleteLastQuote(httpRes);
