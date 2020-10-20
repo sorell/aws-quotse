@@ -11,6 +11,7 @@ var AWS = require('aws-sdk');
 AWS.config.update({region: 'eu-west-1'});
 
 var dynamodb = new AWS.DynamoDB();
+var fs = require('fs');
 //var dynamodb = new AWS.DynamoDB.DocumentClient({apiVersion: '2012-08-10'});
 
 
@@ -278,7 +279,6 @@ function deleteLastQuote(res)
 
 function pushQuotes(res) {
   try {
-    var fs = require('fs');
     const allLines = fs.readFileSync('quotes.txt', 'utf8');
     const lines = allLines.split('\n');
     var addedLines = 0;
@@ -334,15 +334,6 @@ function pushQuotes(res) {
 }
 
 
-// function pullQuoteNrPromise(getIdx) {
-//   const params = {
-//     TableName: 'Quotse',
-//     Key: {
-//       'Idx': {N: getIdx.toString()}
-//     }
-//   };
-//   return dynamodb.getItemAsync(params);
-// }
 
 function pullQuoteNrPromise(res, fileHandle, getIdx) {
   const params = {
@@ -387,7 +378,6 @@ function pullQuotes(res) {
   var pulled = 0;
 
   try {
-    var fs = require('fs');
     var fileHandle = fs.createWriteStream('quotes_pulled.txt', {flags: 'w'});
 
     getQuoteCountPromise().then((result) => {
@@ -406,41 +396,6 @@ function pullQuotes(res) {
     darnation(res);
     return;
   }
-
-
-  return;
-
-
-
-  try {
-    // var fs = require('fs');
-    // const allLines = fs.writeFile('quotes_pulled.txt', 'utf8');
-
-    const params = {
-      TableName: 'Quotse',
-      KeyConditionExpression: 'Idx BETWEEN :from AND :to',
-      // ExpressionAttributeNames: {
-      //   '#idx': 'Idx'
-      // },
-      ExpressionAttributeValues: {
-        ':from': {N: '0'},
-        ':to': {N: '99'}
-      }
-    };
-
-    dynamodb.query(params, function (err, data) {
-      if (err) {
-        console.error(err);
-      }
-      else {
-        console.log(data);
-      }
-    });
-  }
-  catch (err) {
-    console.error(err);
-    darnation(res);
-  }
 }
 
 
@@ -451,6 +406,15 @@ function adminAction(text, res) {
   if (parts.length < 2) {
     console.log('adminAction parts.length =', parts.length.toString());
     darnation(res, 'Parameters missing');
+    return;
+  }
+
+  var pass = '';
+  try {
+    pass = fs.readFileSync('pass.txt', 'utf-8').split('\n')[0];
+  } catch (err) {
+    console.warn('No PW file: admin actions disabled');
+    darnation(res, 'Not configured');
     return;
   }
 
