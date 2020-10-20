@@ -334,52 +334,10 @@ function pushQuotes(httpRes) {
 }
 
 
-function pullQuoteNrPromise(funcData) {
-  // console.log(pullQuoteNrPromise, funcData.idx, '/', funcData.count);
-  const params = {
-    TableName: 'Quotse',
-    Key: {
-      'Idx': {N: funcData.idx.toString()}
-    }
-  };
-  return new Promise((resolve, reject) => {
-    dynamodb.getItemAsync(params).then(function(result) {
-      funcData.db = result;
-      resolve(funcData);
-    }).catch(function (err) {
-      reject(err);
-    });
-  });
-}
-
-
-function writePulledQuote(result) {
-  var fileHandle = result.fh;
-  if (result.idx >= result.count) {
-    console.log('Pulled', result.idx, 'quotes to', result.fn);
-    fileHandle.end();
-    httpRes = result.http;
-    httpRes.statusCode = 200;
-    httpRes.setHeader('Content-Type', 'text/plain');
-    httpRes.end(result.idx.toString() + ' lines pulled to ' + result.fn);
-    return null;
-  }
-
-  // console.log(result);
-  fileHandle.write(result.db.Item.Quote.S + '\n');
-  const quoteIdx = parseInt(result.db.Item.Idx.N);
-  // console.log(quoteIdx, result.db.Item.Quote.S);
-  result.idx += 1;
-  return pullQuoteNrPromise(result).then(writePulledQuote);
-};
-
-
 function pullQuotes(httpRes, fileName) {
   var pulled = 0;
 
   try {
-    var fileHandle = fs.createWriteStream(fileName, {flags: 'w'});
-
     getQuoteCountPromise().then((result) => {
       // console.log('pull CNT', result);
       const quoteCnt = parseInt(result.Item.Value.N);
@@ -388,16 +346,37 @@ function pullQuotes(httpRes, fileName) {
         return;
       }
 
-      pullQuoteNrPromise({http: httpRes, fh: fileHandle, fn: fileName, idx: 0, count: quoteCnt}).then(writePulledQuote, (err) => {
-        console.error('WTF', err);
+      var fileHandle = fs.createWriteStream(fileName, {flags: 'w'});
+      var promises = [];
+
+      for (var i=0; i<quoteCnt; ++i) {
+        promises.push(getQuoteNrPromise(i));
+      }
+      Promise.all(promises).then((result) => {
+        result.sort(function (a, b) {
+          const aIdx = parseInt(a.Item.Idx.N);
+          const bIdx = parseInt(b.Item.Idx.N);
+          return aIdx < bIdx ? -1 : aIdx > bIdx ? 1 : 0;
+        });
+        for (var i=0; i<result.length; ++i) {
+          fileHandle.write(result[i].Item.Quote.S + '\n');
+        }
+        fileHandle.end();
+
+        console.log('Wrote', quoteCnt, 'quotes to', fileName);
+        httpRes.statusCode = 200;
+        httpRes.setHeader('Content-Type', 'text/plain');
+        httpRes.end(quoteCnt.toString() + ' lines written to ' + fileName);
+      }, (err) => {
+        console.error('pullQuotes allPromises ERROR', err);
       });
     }, (err) => {
-      console.error('pullQuotes ERROR', err);
+      console.error('pullQuotes CNT ERROR', err);
       darnation(httpRes);
     });
   }
   catch (err) {
-    console.error('pull CONV ERROR', err);
+    console.error('pullQuotes ERROR', err);
     darnation(httpRes);
     return;
   }
