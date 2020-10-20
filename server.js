@@ -388,7 +388,9 @@ function pullQuotes(httpRes, fileName) {
         return;
       }
 
-      pullQuoteNrPromise({http: httpRes, fh: fileHandle, fn: fileName, idx: 0, count: quoteCnt}).then(writePulledQuote);
+      pullQuoteNrPromise({http: httpRes, fh: fileHandle, fn: fileName, idx: 0, count: quoteCnt}).then(writePulledQuote, (err) => {
+        console.error('WTF', err);
+      });
     }, (err) => {
       console.error('pullQuotes ERROR', err);
       darnation(httpRes);
