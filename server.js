@@ -121,12 +121,12 @@ function getRandomQuote(httpRes) {
   .then((result) => {
     // console.log('getRandomQuote THEN1', result);
     try {
-      const itemCount = parseInt(result.Item.Value.N);
-      if (itemCount < 1) {
+      const quoteCount = parseInt(result.Item.Value.N);
+      if (quoteCount < 1) {
         darnation(httpRes, 'Database empty');
         return;
       }
-      return getQuoteNrPromise(Math.floor(Math.random() * itemCount));
+      return getQuoteNrPromise(Math.floor(Math.random() * quoteCount));
     }
     catch (err) {
       console.error(err);
@@ -191,8 +191,8 @@ function addQuote(line, httpRes) {
   .then((result) => {
     // console.log('getRandomQuote THEN1', result);
     try {
-      const itemCount = parseInt(result.Item.Value.N);
-      return incQuoteCountPromise(itemCount);
+      const quoteCount = parseInt(result.Item.Value.N);
+      return incQuoteCountPromise(quoteCount);
     }
     catch (err) {
       console.error(err);
@@ -235,12 +235,12 @@ function deleteLastQuote(httpRes)
   .then((result) => {
     // console.log('deleteLastQuote THEN', result);
     try {
-      const itemCount = parseInt(result.Item.Value.N);
-      if (itemCount < 1) {
+      const quoteCount = parseInt(result.Item.Value.N);
+      if (quoteCount < 1) {
         darnation(httpRes, 'Database empty');
         return;
       }
-      return decQuoteCountPromise(itemCount);
+      return decQuoteCountPromise(quoteCount);
     }
     catch (err) {
       console.error(err);
@@ -334,17 +334,18 @@ function pushQuotes(httpRes) {
 }
 
 
-
-function pullQuoteNrPromise(httpRes, fileHandle, getIdx) {
+function pullQuoteNrPromise(funcData) {
+console.log(pullQuoteNrPromise, funcData);
   const params = {
     TableName: 'Quotse',
     Key: {
-      'Idx': {N: getIdx.toString()}
+      'Idx': {N: funcData.idx.toString()}
     }
   };
   return new Promise((resolve, reject) => {
     dynamodb.getItemAsync(params).then(function(result) {
-      resolve({'http': httpRes, 'db': result, 'idx': getIdx, 'fh': fileHandle});
+      funcData.db = result;
+      resolve(funcData);
     }).catch(function (err) {
       reject(err);
     });
@@ -354,7 +355,7 @@ function pullQuoteNrPromise(httpRes, fileHandle, getIdx) {
 
 function writePulledQuote(result) {
   var fileHandle = result.fh;
-  if (Object.keys(result.db).length == 0) {
+  if (result.idx >= result.count) {
     console.log('Pulled', result.idx, 'quotes');
     fileHandle.end();
     httpRes = result.http;
@@ -363,12 +364,13 @@ function writePulledQuote(result) {
     httpRes.end(result.idx.toString() + ' lines pulled to quotes_pulled.txt');
     return null;
   }
-  
+
   // console.log(result);
   fileHandle.write(result.db.Item.Quote.S + '\n');
   const quoteIdx = parseInt(result.db.Item.Idx.N);
   // console.log(quoteIdx, result.db.Item.Quote.S);
-  return pullQuoteNrPromise(result.http, result.fh, quoteIdx+1).then(writePulledQuote);
+  result.idx += 1;
+  return pullQuoteNrPromise(result).then(writePulledQuote);
 };
 
 
@@ -380,10 +382,13 @@ function pullQuotes(httpRes) {
 
     getQuoteCountPromise().then((result) => {
       // console.log('pull CNT', result);
-      const quoteCnt = result.Item.Value.N;
-      if (quoteCnt > 0) {
-        pullQuoteNrPromise(httpRes, fileHandle, 0).then(writePulledQuote);
+      const quoteCnt = parseInt(result.Item.Value.N);
+      if (quoteCnt < 1) {
+        darnation(httpRes, 'Database empty');
+        return;
       }
+
+      pullQuoteNrPromise({'http': httpRes, 'fh': fileHandle, 'idx': 0, 'count': quoteCnt}).then(writePulledQuote);
     }, (err) => {
       console.error('pullQuotes ERROR', err);
       darnation(httpRes);
