@@ -25,14 +25,14 @@ const safePromisify = function (fun, methodsArray) {
 safePromisify(dynamodb, ['getItem', 'putItem', 'updateItem', 'deleteItem']);
 
 
-function darnation(res, text) {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/plain');
+function darnation(httpRes, text) {
+  httpRes.statusCode = 200;
+  httpRes.setHeader('Content-Type', 'text/plain');
   if (typeof text === 'undefined') {
-    res.end('Fail. Darnation!');
+    httpRes.end('Fail. Darnation!');
   }
   else {
-    res.end(text);
+    httpRes.end(text);
   }
 }
 
@@ -111,50 +111,50 @@ function deleteQuoteNrPromise(deleteIdx) {
     },
     ReturnValues: 'ALL_OLD'
   };
-  console.log('DELETE', params);
+  // console.log('DELETE', params);
   return dynamodb.deleteItemAsync(params);
 }
 
 
-function getRandomQuote(res) {
+function getRandomQuote(httpRes) {
   getQuoteCountPromise()
   .then((result) => {
     // console.log('getRandomQuote THEN1', result);
     try {
       const itemCount = parseInt(result.Item.Value.N);
       if (itemCount < 1) {
-        darnation(res, 'Database empty');
+        darnation(httpRes, 'Database empty');
         return;
       }
       return getQuoteNrPromise(Math.floor(Math.random() * itemCount));
     }
     catch (err) {
       console.error(err);
-      darnation(res);
+      darnation(httpRes);
     }
   }, (err) => {
     console.error('GET Counters', err);
-    darnation(res);
+    darnation(httpRes);
   })
   .then((result) => {
     try {
       // console.log('getRandomQuote THEN2', result);
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'application/json');
-      res.end('{"response_type":"in_channel","text":"' + result.Item.Quote.S.split('"').join('\\"') + '"}');
+      httpRes.statusCode = 200;
+      httpRes.setHeader('Content-Type', 'application/json');
+      httpRes.end('{"response_type":"in_channel","text":"' + result.Item.Quote.S.split('"').join('\\"') + '"}');
     }
     catch (err) {
       console.error(err);
-      darnation(res);
+      darnation(httpRes);
     }
   }, (err) => {
     console.error('GET Quotse', err);
-    darnation(res);
+    darnation(httpRes);
   });
 }
 
 
-function scanQuotes(keyword, res) {
+function scanQuotes(keyword, httpRes) {
   const params = {
     TableName: 'Quotse',
     FilterExpression: 'contains (ScanText, :keyword)',
@@ -166,27 +166,27 @@ function scanQuotes(keyword, res) {
     if (err) {
       console.log('QUERY Error', err);
     } else {
-      console.log('QUERY Success', result);
-      console.log('got items:', result.Items.length);
+      // console.log('QUERY Success', result);
+      // console.log('got items:', result.Items.length);
       
       if (result.Items.length < 1) {
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/json');
-        res.end('{"response_type":"in_channel","text":"No match :("}');
+        httpRes.statusCode = 200;
+        httpRes.setHeader('Content-Type', 'application/json');
+        httpRes.end('{"response_type":"in_channel","text":"No match :("}');
         return;
       }
 
       const itemNr = Math.floor(Math.random() * result.Items.length);
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'application/json');
-      res.end('{"response_type":"in_channel","text":"' + result.Items[itemNr].Quote.S.split('"').join('\\"') + '"}');
+      httpRes.statusCode = 200;
+      httpRes.setHeader('Content-Type', 'application/json');
+      httpRes.end('{"response_type":"in_channel","text":"' + result.Items[itemNr].Quote.S.split('"').join('\\"') + '"}');
       console.log(result.Items[itemNr]);
     }
   });
 }
 
 
-function addQuote(line, res) {
+function addQuote(line, httpRes) {
   getQuoteCountPromise()
   .then((result) => {
     // console.log('getRandomQuote THEN1', result);
@@ -196,14 +196,14 @@ function addQuote(line, res) {
     }
     catch (err) {
       console.error(err);
-      darnation(res);
+      darnation(httpRes);
     }
   }, (err) => {
     console.error('GET Counter', err);
-    darnation(res);
+    darnation(httpRes);
   })
   .then((result) => {
-    console.log('incRandomQuote THEN1', result);
+    // console.log('incRandomQuote THEN1', result);
     const params = {
       TableName: 'Quotse',
       Item: {
@@ -216,20 +216,20 @@ function addQuote(line, res) {
     return dynamodb.putItemAsync(params);
   }, (err) => {
     console.error('INC Counter', err);
-    darnation(res);
+    darnation(httpRes);
   })
   .then((result) => {
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.end('{"response_type":"in_channel","text":"It is done"}');
+    httpRes.statusCode = 200;
+    httpRes.setHeader('Content-Type', 'application/json');
+    httpRes.end('{"response_type":"in_channel","text":"It is done"}');
   }, (err) => {
     console.error('PUT new', err);
-    darnation(res);
+    darnation(httpRes);
   });
 }
 
 
-function deleteLastQuote(res)
+function deleteLastQuote(httpRes)
 {
   getQuoteCountPromise()
   .then((result) => {
@@ -237,18 +237,18 @@ function deleteLastQuote(res)
     try {
       const itemCount = parseInt(result.Item.Value.N);
       if (itemCount < 1) {
-        darnation(res, 'Database empty');
+        darnation(httpRes, 'Database empty');
         return;
       }
       return decQuoteCountPromise(itemCount);
     }
     catch (err) {
       console.error(err);
-      darnation(res);
+      darnation(httpRes);
     }
   }, (err) => {
     console.error('GET Counter', err);
-    darnation(res);
+    darnation(httpRes);
   })
   .then((result) => {
     // console.log('DEC THEN', result);
@@ -260,14 +260,14 @@ function deleteLastQuote(res)
     }
   }, (err) => {
     console.error('DEC Counter', err);
-    darnation(res);
+    darnation(httpRes);
   })
   .then((result) => {
     // console.log('DELETE Quote', result);
     try {
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/plain');
-      res.end('Quote removed: ' + result.Attributes.Quote.S.split('"').join('\\"'));
+      httpRes.statusCode = 200;
+      httpRes.setHeader('Content-Type', 'text/plain');
+      httpRes.end('Quote removed: ' + result.Attributes.Quote.S.split('"').join('\\"'));
     } catch (err) {
       console.error('DELETE Quote', err);
     }
@@ -277,7 +277,7 @@ function deleteLastQuote(res)
 }
 
 
-function pushQuotes(res) {
+function pushQuotes(httpRes) {
   try {
     const allLines = fs.readFileSync('quotes.txt', 'utf8');
     const lines = allLines.split('\n');
@@ -323,19 +323,19 @@ function pushQuotes(res) {
       }
     });
 
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end(addedLines.toString() + ' lines added');
+    httpRes.statusCode = 200;
+    httpRes.setHeader('Content-Type', 'text/plain');
+    httpRes.end(addedLines.toString() + ' lines added');
   }
   catch (err) {
     console.error(err);
-    darnation(res);
+    darnation(httpRes);
   }
 }
 
 
 
-function pullQuoteNrPromise(res, fileHandle, getIdx) {
+function pullQuoteNrPromise(httpRes, fileHandle, getIdx) {
   const params = {
     TableName: 'Quotse',
     Key: {
@@ -344,7 +344,7 @@ function pullQuoteNrPromise(res, fileHandle, getIdx) {
   };
   return new Promise((resolve, reject) => {
     dynamodb.getItemAsync(params).then(function(result) {
-      resolve({'http': res, 'db': result, 'idx': getIdx, 'fh': fileHandle});
+      resolve({'http': httpRes, 'db': result, 'idx': getIdx, 'fh': fileHandle});
     }).catch(function (err) {
       reject(err);
     });
@@ -357,10 +357,10 @@ function writePulledQuote(result) {
   if (Object.keys(result.db).length == 0) {
     console.log('Pulled', result.idx, 'quotes');
     fileHandle.end();
-    res = result.http;
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end(result.idx.toString() + ' lines pulled to quotes_pulled.txt');
+    httpRes = result.http;
+    httpRes.statusCode = 200;
+    httpRes.setHeader('Content-Type', 'text/plain');
+    httpRes.end(result.idx.toString() + ' lines pulled to quotes_pulled.txt');
     return null;
   }
   
@@ -372,40 +372,38 @@ function writePulledQuote(result) {
 };
 
 
-function pullQuotes(res) {
-  // const pqueue = require('p-queue');
-  // const queue = new PQueue({concurrency: 1});
+function pullQuotes(httpRes) {
   var pulled = 0;
 
   try {
     var fileHandle = fs.createWriteStream('quotes_pulled.txt', {flags: 'w'});
 
     getQuoteCountPromise().then((result) => {
-      console.log('pull CNT', result);
+      // console.log('pull CNT', result);
       const quoteCnt = result.Item.Value.N;
       if (quoteCnt > 0) {
-        pullQuoteNrPromise(res, fileHandle, 0).then(writePulledQuote);
+        pullQuoteNrPromise(httpRes, fileHandle, 0).then(writePulledQuote);
       }
     }, (err) => {
       console.error('pullQuotes ERROR', err);
-      darnation(res);
+      darnation(httpRes);
     });
   }
   catch (err) {
     console.error('pull CONV ERROR', err);
-    darnation(res);
+    darnation(httpRes);
     return;
   }
 }
 
 
-function adminAction(text, res) {
+function adminAction(text, httpRes) {
   console.log('adminAction', text);
 
   const parts = text.split(' ');
   if (parts.length < 2) {
     console.log('adminAction parts.length =', parts.length.toString());
-    darnation(res, 'Parameters missing');
+    darnation(httpRes, 'Parameters missing');
     return;
   }
 
@@ -414,28 +412,28 @@ function adminAction(text, res) {
     pass = fs.readFileSync('pass.txt', 'utf-8').split('\n')[0];
   } catch (err) {
     console.warn('No PW file: admin actions disabled');
-    darnation(res, 'Not configured');
+    darnation(httpRes, 'Not configured');
     return;
   }
 
   if (parts[0] != '2T0uVdwJTd2hSSx9oa') {
     console.log('adminAction bad pass');
-    darnation(res, 'Bad param');
+    darnation(httpRes, 'Bad param');
     return;
   }
 
   if (parts[1] == 'pushQuotes') {
-    pushQuotes(res);
+    pushQuotes(httpRes);
   }
   else if (parts[1] == 'pullQuotes') {
-    pullQuotes(res);
+    pullQuotes(httpRes);
   }
   else if (parts[1] == 'deleteLast') {
-    deleteLastQuote(res);
+    deleteLastQuote(httpRes);
   }
   else {
     console.log('adminAction unk cmd');
-    darnation(res, 'Bad param');
+    darnation(httpRes, 'Bad param');
   }
 }
 
@@ -478,8 +476,8 @@ const server = http.createServer((req, res) => {
         adminAction(text, res);
       }
     }
-    catch (e) {
-      console.error(e.message);
+    catch (err) {
+      console.error(err);
     }
   });
 
